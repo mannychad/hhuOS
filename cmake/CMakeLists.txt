@@ -77,7 +77,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32 -g -Wall -Wno-write-strings -fno-stack-
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS} -Wl,--build-id=none -Wno-non-virtual-dtor -fno-threadsafe-statics -fno-use-cxa-atexit -fno-rtti -fno-exceptions -std=c++17 -T ${HHUOS_SRC_DIR}/link.ld")
 
 # Add subdirectories
-add_subdirectory(application)
 add_subdirectory(device)
 add_subdirectory(filesystem)
 add_subdirectory(kernel)

@@ -27,7 +27,7 @@
 #include <filesystem/ram/nodes/video/CurrentResolutionNode.h>
 #include <filesystem/ram/nodes/video/CurrentGraphicsDriverNode.h>
 #include <filesystem/ram/nodes/video/GraphicsDriversNode.h>
-#include <lib/system/SimpleResult.h>
+#include <kernel/process/ProcessScheduler.h>
 #include "kernel/memory/manager/StaticHeapMemoryManager.h"
 #include "filesystem/fat/FatDriver.h"
 #include "device/graphic/vesa/VesaGraphics.h"
@@ -36,7 +36,6 @@
 #include "device/graphic/cga/CgaGraphics.h"
 #include "device/graphic/cga/CgaText.h"
 #include "device/storage/floppy/FloppyController.h"
-#include "device/cpu/CpuId.h"
 #include "kernel/service/EventBus.h"
 #include "kernel/multiboot/Structure.h"
 #include "kernel/debug/GdbServer.h"
@@ -45,7 +44,6 @@
 #include "kernel/service/InputService.h"
 #include "device/pci/Pci.h"
 #include "filesystem/core/Filesystem.h"
-#include "application/Application.h"
 #include "kernel/thread/Scheduler.h"
 #include "device/time/Pit.h"
 #include "kernel/service/DebugService.h"
@@ -55,27 +53,17 @@
 #include "kernel/service/PortService.h"
 #include "device/storage/ahci/AhciController.h"
 #include "device/usb/Uhci.h"
-#include "filesystem/tar/TarArchiveNode.h"
-#include "filesystem/tar/TarArchiveDriver.h"
-#include "lib/file/Directory.h"
 #include "lib/file/beep/BeepFile.h"
 #include "kernel/service/ScreenshotService.h"
-#include "lib/file/wav/Wav.h"
 #include "kernel/interrupt/InterruptManager.h"
 #include "lib/libc/system_interface.h"
-#include "lib/file/FileStatus.h"
 #include "kernel/memory/manager/FreeListMemoryManager.h"
-#include "kernel/core/Management.h"
 #include "kernel/log/PortAppender.h"
 #include "device/misc/Bios.h"
 #include "device/graphic/text/LfbText.h"
-#include "kernel/bluescreen/BlueScreenLfb.h"
-#include "application/mouse/MouseApp.h"
-#include "device/misc/Cmos.h"
 #include "device/network/e1000/driver/intel82541IP/Intel82541IP.h"
 #include "device/network/e1000/driver/intel82540EM/Intel82540EM.h"
 #include "kernel/service/NetworkService.h"
-#include "application/shell/Shell.h"
 #include "device/port/parallel/ParallelDriver.h"
 #include "device/port/serial/SerialDriver.h"
 #include "GatesOfHell.h"
@@ -87,7 +75,7 @@ AnsiOutputStream *GatesOfHell::outputStream = nullptr;
 
 Kernel::BootScreen *GatesOfHell::bootscreen = nullptr;
 
-Kernel::IdleThread *GatesOfHell::idleThread = nullptr;
+Kernel::IdleThread GatesOfHell::idleThread;
 
 uint16_t GatesOfHell::xres = 0;
 
@@ -141,6 +129,8 @@ Kernel::BootComponent GatesOfHell::initGraphicsComponent("InitGraphicsComponent"
     if(Kernel::Multiboot::Structure::getKernelOption("splash") == "true") {
 
         bootscreen->init(xres, yres, bpp);
+
+        Kernel::System::getKernelProcess().ready(*bootscreen);
     }
 });
 
@@ -208,66 +198,20 @@ Kernel::BootCoordinator GatesOfHell::coordinator(Util::Array<Kernel::BootCompone
 
     stdout = File::open("/dev/stdout", "w");
 
-    bootscreen->finish();
+    // bootscreen->finish();
 
     Kernel::Logger::setConsoleLogging(false);
 
     delete outputStream;
 
-    Application::getInstance().start();
+    //Application::getInstance().start();
 });
 
 
-//static int counter = 0;
-
 void GatesOfHell::enter() {
-    
-    /*asm volatile("cli");
-    
-    auto thread1 = new SimpleThread([]{
-        while(true) {
-            counter++;
-        }
-    });
 
-    auto thread2 = new SimpleThread([]{
-        while(true) {
-            counter++;
-        }
-    });
-
-    thread1->start();
-    thread2->start();
-
-    Kernel::Scheduler::getInstance().startUp();*/
-    
-    
-
-
-    
     log.trace("Booting hhuOS %s - git %s", BuildConfig::getVersion(), BuildConfig::getGitRevision());
     log.trace("Build date: %s", BuildConfig::getBuildDate());
-
-    Kernel::SystemCall::registerSystemCall(Standard::System::Call::SYSTEM_CALL_TEST, [](uint32_t paramCount, va_list params, Standard::System::Result *result) {
-        auto *simpleResult = reinterpret_cast<Standard::System::SimpleResult<uint32_t>*>(result);
-
-        log.debug("System call with %d parameters!", paramCount);
-
-        uint32_t sum = 0;
-        
-        for(uint32_t i = 0; i < paramCount; i++) {
-            uint32_t param = va_arg(params, uint32_t);
-            log.debug("Parameter %d: %d", i, param);
-            sum += param;
-        }
-
-        simpleResult->setValue(sum);
-    });
-
-    Standard::System::SimpleResult<uint32_t> result{};
-    Standard::System::Call::execute(Standard::System::Call::Code::SYSTEM_CALL_TEST, result, 3, 10, 20, 30);
-    
-    log.debug("System call returned with value: %d", result.getValue());
 
     if(Kernel::Multiboot::Structure::getKernelOption("bios_enhancements") == "true") {
         coordinator.addComponent(&initBiosComponent);
@@ -278,14 +222,12 @@ void GatesOfHell::enter() {
         coordinator.addComponent(&parsePciDatabaseComponent);
     }
 
-    idleThread = new Kernel::IdleThread();
-    idleThread->start();
+    Kernel::System::getKernelProcess().ready(idleThread);
+    Kernel::System::getKernelProcess().ready(Kernel::InterruptManager().getInstance());
+    Kernel::System::getKernelProcess().ready(coordinator);
+    Kernel::System::getKernelProcess().start();
 
-    Kernel::InterruptManager::getInstance().start();
-
-    coordinator.start();
-
-    Kernel::Scheduler::getInstance().startUp();
+    Kernel::ProcessScheduler::getInstance().startUp();
 
     Cpu::halt();
 }
@@ -325,7 +267,7 @@ void GatesOfHell::afterInitrdModHook() {
     }
 
     auto *vesaLfb = new VesaGraphics();
-    if(cgaLfb->isAvailable()) {
+    if(vesaLfb->isAvailable()) {
         log.info("Detected a VESA compatible graphics card");
         Kernel::System::getService<Kernel::GraphicsService>()->registerLinearFrameBuffer(vesaLfb);
         Kernel::System::getService<Kernel::GraphicsService>()->registerTextDriver(new VesaText());
