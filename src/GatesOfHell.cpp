@@ -204,6 +204,10 @@ Kernel::BootCoordinator GatesOfHell::coordinator(Util::Array<Kernel::BootCompone
 
     delete outputStream;
 
+    Kernel::Process *test = new Kernel::Process(*Kernel::Management::getInstance().createAddressSpace(0x1000, "FreeListMemoryManager"));
+    Kernel::ProcessScheduler::getInstance().ready(*test);
+    //Kernel::Process::loadExecutable("/initrd/bin/hello");
+
     //Application::getInstance().start();
 });
 
@@ -223,7 +227,7 @@ void GatesOfHell::enter() {
     }
 
     Kernel::System::getKernelProcess().ready(idleThread);
-    Kernel::System::getKernelProcess().ready(Kernel::InterruptManager().getInstance());
+    Kernel::System::getKernelProcess().ready(Kernel::InterruptManager::getInstance());
     Kernel::System::getKernelProcess().ready(coordinator);
     Kernel::System::getKernelProcess().start();
 

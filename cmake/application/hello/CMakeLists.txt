@@ -14,6 +14,17 @@
 
 cmake_minimum_required(VERSION 3.5)
 
-project("hhuOS")
+project(hello)
+message(STATUS "Project " ${PROJECT_NAME})
 
-add_subdirectory(cmake) 
+include_directories(${HHUOS_SRC_DIR})
+
+# Set source files
+set(SOURCE_FILES
+        ${HHUOS_SRC_DIR}/application/hello/hello.c)
+
+add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${HHUOS_ROOT_DIR}/initrd/bin/)
+
+set(CMAKE_C_FLAGS "-m32 -nostdlib -ffreestanding -O0 -fno-pic -no-pie -Wl,--hash-style=sysv,-emain -T ${HHUOS_SRC_DIR}/application/link.ld")

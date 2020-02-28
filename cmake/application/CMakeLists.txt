@@ -14,6 +14,10 @@
 
 cmake_minimum_required(VERSION 3.5)
 
-project("hhuOS")
+project(application)
+message(STATUS "Project " ${PROJECT_NAME})
 
-add_subdirectory(cmake) 
+include_directories(${HHUOS_SRC_DIR})
+
+# Add subdirectories
+add_subdirectory(hello)
